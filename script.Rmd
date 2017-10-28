@@ -3,12 +3,6 @@ title: 'Exploring the Titanic Dataset'
 author: 'Leonard M de Assis'
 date: '`r Sys.Date()`'
 output:
-  html_notebook:
-    fig_width: 7
-    highlight: tango
-    number_sections: yes
-    theme: flatly
-    toc: yes
   html_document:
     number_sections: true
     toc: true
@@ -16,6 +10,12 @@ output:
     fig_height: 4.5
     theme: flatly
     highlight: tango
+  html_notebook:
+    fig_width: 7
+    highlight: tango
+    number_sections: yes
+    theme: flatly
+    toc: yes
 ---
 
 # Introduction
@@ -25,7 +25,7 @@ This document has two objectives
 1. understand how Kagle works
 2. start to understand how decision trees (and random forests) works
 
-This is my first kagle project ever, I have chosen to work with the Titanic dataset because this dataset is quite easy to build models with a high RMSE. I will also focus on doing some illustrative data visualizations along the way. I'll then use `randomForest` to create a model predicting survival on the Titanic. I choose this method because this is the method that I have less expertize and my intention is become familiar with this one.
+This is my first kaggle project ever, I have chosen to work with the Titanic dataset because this dataset is quite easy to build models with a high RMSE. I will also focus on doing some illustrative data visualizations along the way. I'll then use `randomForest` to create a model predicting survival on the Titanic. I choose this method because this is the method that I have less expertize and my intention is become familiar with this one.
 
 Another strategy that I am going to test in this document are methods of 'Missing value imputation', which I am beginning to study in a somewhat more systematic way recently
 
@@ -140,7 +140,7 @@ ggplot(full[1:891,], aes(x = Fsize, fill = factor(Survived))) +
   theme_few()
 ```
 
-Ah hah. We can see that there's a survival penalty to singletons and those with family sizes above 4. We can collapse this variable into three levels which will be helpful since there are comparatively fewer large families. Let's create a **discretized family size** variable. (FSizeD will be its name) This variable will assume 3 possible values:
+Ah hah. We can see that there's a survival penalty to singletons and those with family sizes above 4. We can collapse this variable into three levels which will be helpful since there are comparatively fewer large families. Let's create a **discretized family size** variable. (`FSizeD` will be its name) This variable will assume 3 possible values:
 
 Family size | Description
 ------------|-------------
@@ -150,10 +150,21 @@ large       | Families with 5 or more members
 
 ```{r}
 # Discretize family size
-full$FsizeD[full$Fsize == 1] <- 'singleton'
-full$FsizeD[full$Fsize < 5 & full$Fsize > 1] <- 'small'
-full$FsizeD[full$Fsize > 4] <- 'large'
+full$FsizeD[full$Fsize == 1] <- '[1] singleton'
+full$FsizeD[full$Fsize < 5 & full$Fsize > 1] <- '[2 to 4] small'
+full$FsizeD[full$Fsize > 4] <- '[5+] large'
+```
 
+```{r, message=FALSE, warning=FALSE}
+# Use ggplot2 to visualize the relationship between family size & survival
+ggplot(full[1:891,], aes(x = FsizeD, fill = factor(Survived))) +
+  geom_bar(stat='count', position='dodge') +
+  labs(x = 'Family Size') +
+  theme_few()
+```
+
+
+```{r}
 # Show family size by survival using a mosaic plot
 mosaicplot(table(full$FsizeD, full$Survived), main='Family Size by Survival', shade=TRUE)
 ```
@@ -166,14 +177,15 @@ What's left? There's probably some potentially useful information in the **passe
 
 ```{r}
 # This variable appears to have a lot of missing values
-full$Cabin[1:28]
+full$Cabin[1:30]
 ```
 
 We can supose that the 1st character is the deck:
 ```{r}
 # The first character is the deck. For example:
 strsplit(full$Cabin[2], NULL)[[1]]
-
+```
+```{r}
 # Create a Deck variable. Get passenger deck A - F:
 full$Deck<-factor(sapply(full$Cabin, function(x) strsplit(x, NULL)[[1]][1]))
 ```
@@ -187,16 +199,23 @@ Now we're ready to start exploring missing data and rectifying it through imputa
 ## Sensible value imputation
 
 ```{r}
+full %>%
+select(Embarked, PassengerId, Pclass, Fare) %>%
+filter(Embarked !='S' & Embarked != 'C' & Embarked !='Q')
+```
+```{r}
 # Passengers 62 and 830 are missing Embarkment
 full[c(62, 830), 'Embarked']
+
 ```
-We will infer their values for **embarkment** based on present data that we can imagine may be relevant: **passenger class** and **fare**. We see that they paid `r full[c(62, 830), 'Fare'][[1]][1]` and `r full[c(62, 830), 'Fare'][[1]][2] ` respectively and their classes are `r full[c(62, 830), 'Pclass'][[1]][1] ` and `r full[c(62, 830), 'Pclass'][[1]][2]`. So from where did they embark?
+We will infer their values for **embarkment** based on present data that we can imagine may be relevant: **passenger class** and **fare**. We see that they paid `r full[c(62), 'Fare'][[1]]` and `r full[c(830), 'Fare'][[1]] ` respectively and their classes are `r full[c(62), 'Pclass'][[1]] ` and `r full[c(830), 'Pclass'][[1]]`. So from where did they embark?
 
 ```{r, message=FALSE, warning=FALSE}
 # Get rid of our missing passenger IDs
 embark_fare <- full %>%
   filter(PassengerId != 62 & PassengerId != 830)
-
+```
+```{r}
 # Use ggplot2 to visualize embarkment, passenger class, & median fare
 ggplot(embark_fare, aes(x = Embarked, y = Fare, fill = factor(Pclass))) +
   geom_boxplot() +
@@ -216,14 +235,19 @@ full$Embarked[c(62, 830)] <- 'C'
 We're close to fixing the handful of NA values here and there. Passenger on row 1044 has an NA Fare value.
 
 ```{r, message=FALSE, warning=FALSE}
-# Show row 1044
-full[1044, ]
+full %>%
+  filter(is.na(Fare)) %>%
+  select(PassengerId, Pclass, Embarked)
 ```
 
 This is a third class passenger who departed from Southampton ('S'). Let's visualize Fares among all others sharing their class and embarkment (n = `r nrow(full[full$Pclass == '3' & full$Embarked == 'S', ]) - 1`).
 
 ```{r, message=FALSE, warning=FALSE}
-ggplot(full[full$Pclass == '3' & full$Embarked == 'S', ], 
+full %>%
+  filter(Pclass == '3' & Embarked == 'S') -> PC3ES
+```
+```{r}
+ggplot(PC3ES, 
   aes(x = Fare)) +
   geom_density(fill = '#99d6ff', alpha=0.4) + 
   geom_vline(aes(xintercept=median(Fare, na.rm=T)),
@@ -236,7 +260,8 @@ From this visualization, it seems quite reasonable to replace the NA Fare value 
 
 ```{r}
 # Replace missing fare value with median fare for class/embarkment
-full$Fare[1044] <- median(full[full$Pclass == '3' & full$Embarked == 'S', ]$Fare, na.rm = TRUE)
+full$Fare[1044] <-
+  median(full[full$Pclass == '3' & full$Embarked == 'S', ]$Fare, na.rm = TRUE)
 ```
 
 ## Predictive imputation
@@ -250,25 +275,38 @@ sum(is.na(full$Age))
 
 We could definitely use `rpart` (recursive partitioning for regression) to predict missing ages, but I'm going to use the `mice` package for this task just for something different. You can read more about multiple imputation using chained equations in r [here](http://www.jstatsoft.org/article/view/v045i03/v45i03.pdf) (PDF). Since we haven't done it yet, I'll first factorize the factor variables and then perform mice imputation.
 
+The mice software was published in the Journal of Statistical Software (Van Buuren and Groothuis-Oudshoorn, 2011). The first application of the method concerned missing blood pressure data (Van Buuren et. al., 1999). The term Fully Conditional Specification was introduced in 2006 to describe a general class of methods that specify imputations model for multivariate data as a set of conditional distributions (Van Buuren et. al., 2006). Further details on mixes of variables and applications can be found in the book Flexible Imputation of Missing Data.
+
 ```{r, message=FALSE, warning=FALSE}
 # Make variables factors into factors
 factor_vars <- c('PassengerId','Pclass','Sex','Embarked',
                  'Title','Surname','Family','FsizeD')
 
 full[factor_vars] <- lapply(full[factor_vars], function(x) as.factor(x))
-
-# Set a random seed
-set.seed(129)
 ```
+
+According to de `mice` package documentation, we need no more than 10 iterations to get good results. I am using `randomForest` as method for imputation
 ```{r}
+# Set a random seed
+set.seed(12345)
+
 # Perform mice imputation, excluding certain less-than-useful variables:
-mice_mod <- mice(full[, !names(full) %in% c('PassengerId','Name','Ticket','Cabin','Family','Surname','Survived')], method='rf') 
+mice.vars <- 
+  names(full) %in%
+  c('PassengerId','Name','Ticket',
+    'Cabin','Family','Surname','Survived')
+mice_mod <- 
+  mice(
+    data=full[, !mice.vars],
+       method='rf',
+       m=10,
+       maxit=10) 
 
 # Save the complete output 
 mice_output <- complete(mice_mod)
 ```
 
-Let's compare the results we get with the original distribution of passenger ages to ensure that nothing has gone completely awry.
+Let's compare the results we get with the original distribution of passenger ages to ensure that nothing has gone completely wrong.
 
 ```{r}
 # Plot age distributions
@@ -302,7 +340,8 @@ ggplot(full[1:891,], aes(Age, fill = factor(Survived))) +
   # I include Sex since we know (a priori) it's a significant predictor
   facet_grid(.~Sex) + 
   theme_few()
-
+```
+```{r}
 # Create the column child, and indicate whether child or adult
 full$Child[full$Age < 18] <- 'Child'
 full$Child[full$Age >= 18] <- 'Adult'
@@ -320,7 +359,8 @@ full$Mother[full$Sex == 'female' & full$Parch > 0 & full$Age > 18 & full$Title !
 
 # Show counts
 table(full$Mother, full$Survived)
-
+```
+```{r}
 # Finish by factorizing our two new factor variables
 full$Child  <- factor(full$Child)
 full$Mother <- factor(full$Mother)
@@ -355,47 +395,59 @@ We then build our model using `randomForest` on the training set.
 
 ```{r}
 # Set a random seed
-set.seed(754)
+set.seed(54321)
 
-# Build the model (note: not all possible variables are used)
-rf_model <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + 
-                                            Fare + Embarked + Title + 
-                                            FsizeD + Child + Mother,
-                                            data = train)
+start <- proc.time()[3]
+model.rf <- 
+  randomForest::randomForest(
+    factor(Survived) ~
+      Pclass + Sex + Age + SibSp + Parch + 
+      Fare + Embarked + Title + 
+      FsizeD + Child + Mother,
+    data=train,
+    method = "rf",
+    ntree = 1000,
+    localImp=T)
 
-# Show model error
-plot(rf_model, ylim=c(0,0.36))
-legend('topright', colnames(rf_model$err.rate), col=1:3, fill=1:3)
+end <- proc.time()[3]
+```
+```{r}
+cat("This took ", round(end-start,digits = 2), " seconds", sep = "")
+```
+```{r}
+model.rf
+```
+```{r}
+plot(model.rf)
 ```
 
 The black line shows the overall error rate which falls below 20%. The red and green lines show the error rate for 'died' and 'survived' respectively. We can see that right now we're much more successful predicting death than we are survival. What does that say about me, I wonder?
 
 ## Variable importance
 
-Let's look at relative variable importance by plotting the mean decrease in Gini calculated across all trees.
-
-```{r, message=FALSE, warning=FALSE}
-# Get importance
-importance    <- importance(rf_model)
-varImportance <- data.frame(Variables = row.names(importance), 
-                            Importance = round(importance[ ,'MeanDecreaseGini'],2))
-
-# Create a rank variable based on importance
-rankImportance <- varImportance %>%
-  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
-
-# Use ggplot2 to visualize the relative importance of variables
-ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
-    y = Importance, fill = Importance)) +
-  geom_bar(stat='identity') + 
-  geom_text(aes(x = Variables, y = 0.5, label = Rank),
-    hjust=0, vjust=0.55, size = 4, colour = 'red') +
-  labs(x = 'Variables') +
-  coord_flip() + 
-  theme_few()
+```{r}
+require(randomForestExplainer)
+```
+```{r}
+min_depth_frame <- min_depth_distribution(model.rf)
 ```
 
-Whoa, glad we made our title variable! It has the highest relative importance out of all of our predictor variables. I think I'm most surprised to see that passenger class fell to `r rankImportance[rankImportance$Variable == 'Pclass', ]$Rank`, but maybe that's just bias coming from watching the movie Titanic too many times as a kid.
+```{r}
+plot_min_depth_distribution(min_depth_frame,
+                            mean_sample = "relevant_trees", k = 15)
+```
+The graph above shows us that being a child is more important to determine survival, but being a mother is more relevant.
+
+```{r message=FALSE, warning=TRUE}
+importance_frame <- measure_importance(model.rf)
+```
+
+```{r}
+plot_multi_way_importance(
+  importance_frame,
+  size_measure = "gini_decrease")
+
+```
 
 ## Prediction!
 
@@ -403,7 +455,7 @@ We're ready for the final step --- making our prediction! When we finish here, w
 
 ```{r}
 # Predict using the test set
-prediction <- predict(rf_model, test)
+prediction <- predict(model.rf, test)
 
 # Save the solution to a dataframe with two columns: PassengerId and Survived (prediction)
 solution <- data.frame(PassengerID = test$PassengerId, Survived = prediction)
