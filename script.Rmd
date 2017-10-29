@@ -3,12 +3,6 @@ title: 'Exploring the Titanic Dataset'
 author: 'Leonard M de Assis'
 date: '`r Sys.Date()`'
 output:
-  html_notebook:
-    fig_width: 7
-    highlight: tango
-    number_sections: yes
-    theme: flatly
-    toc: yes
   html_document:
     number_sections: true
     toc: true
@@ -16,6 +10,12 @@ output:
     fig_height: 4.5
     theme: flatly
     highlight: tango
+  html_notebook:
+    fig_width: 7
+    highlight: tango
+    number_sections: yes
+    theme: flatly
+    toc: yes
 ---
 
 # Introduction
@@ -436,23 +436,33 @@ The black line shows the overall error rate which falls below 20%. The red and g
 ## Variable importance
 
 ```{r}
+start <- proc.time()[3]
 min_depth_frame <- min_depth_distribution(model.rf)
-```
+end <- proc.time()[3]
 
+cat("This took ", round(end-start,digits = 2), " seconds", sep = "")
+```
 ```{r}
 plot_min_depth_distribution(min_depth_frame,
-                            mean_sample = "relevant_trees", k = 15)
+                            mean_sample = "relevant_trees",
+                            k=15)
 ```
 The graph above shows us that being a child is more important to determine survival, but being a mother is more relevant.
 
 ```{r message=FALSE, warning=TRUE}
+start <- proc.time()[3]
+
 importance_frame <- measure_importance(model.rf)
+
+end <- proc.time()[3]
+cat("This took ", round(end-start,digits = 2), " seconds", sep = "")
+
 ```
 
 ```{r}
 plot_multi_way_importance(
   importance_frame,
-  size_measure = "gini_decrease")
+  size_measure = "mean_min_depth")
 
 ```
 
@@ -476,4 +486,4 @@ write.csv(solution, file = 'rf_mod_Solution.csv', row.names = F)
 
 # Conclusion
 
-Thank you for taking the time to read through my first exploration of a Kaggle dataset. I look forward to doing more. Again, this newbie welcomes comments and suggestions!
+Thank you for taking the time to read through my first exploration of a Kaggle dataset. I look forward to doing more. I am new to Kaggle, but not in data analysis, I will try to produce more documents like this in the future. 
